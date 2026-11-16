@@ -135,3 +135,7 @@ python3 server.py serve [PDF] [--data DIR] [--tex-dir DIR] [--author 名字] [--
 ```
 
 端口被占用时会自动往后找空闲端口。`--host 0.0.0.0` 可以让局域网里的人直接连你的页面，但目前**没有登录和权限控制**，只在可信网络里用。
+
+## 许可证
+
+[MIT](LICENSE)
