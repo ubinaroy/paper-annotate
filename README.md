@@ -5,6 +5,21 @@
 - 只依赖 **Python 3.9+ 标准库**，网页用 CDN 上的 pdf.js，不用装任何东西
 - 论文不上传到任何服务器，服务只监听本机
 
+![总览：左边是论文，高亮和页边编号是批注；右边是批注列表，带批注人、标签、状态和回复](docs/overview.png)
+
+<table>
+<tr>
+<td width="50%"><img src="docs/composer.png" alt="点一下句子，选中整句并写批注"></td>
+<td width="50%"><img src="docs/review.png" alt="框选图表做区域批注；按批注人筛选"></td>
+</tr>
+<tr>
+<td align="center">点一下句子即选中整句，打标签、写批注</td>
+<td align="center">框选图表做区域批注；侧栏按批注人筛选</td>
+</tr>
+</table>
+
+截图用的是仓库里的虚构演示论文 [`examples/demo-paper`](examples/demo-paper)，你也可以拿它先试一试（见下文）。
+
 ## 快速开始
 
 ```bash
@@ -12,7 +27,11 @@ git clone <本仓库> && cd paper-annotate
 python3 server.py path/to/main.pdf
 ```
 
-打开终端里打印出的地址（默认 <http://localhost:8791>）。批注数据存在当前目录的 `annotate-data/`；想放别处就加 `--data <目录>`。第一次启动之后，PDF 路径会记在数据目录里，再启动只要 `python3 server.py`（加上同样的 `--data`）。`serve` 子命令可写可不写。
+打开终端里打印出的地址（默认 <http://localhost:8791>）。
+
+手边没有论文的话，可以先用演示论文试：`python3 server.py examples/demo-paper/demo.pdf --data demo-data`。装了 TeX 的话，先在 `examples/demo-paper` 里跑一遍 `latexmk -pdf -synctex=1 demo.tex`，批注就能带上 `.tex` 行号。
+
+批注数据存在当前目录的 `annotate-data/`；想放别处就加 `--data <目录>`。一个数据目录只对应一篇论文，换论文时用 `--data` 另开一个目录，否则会提示并拒绝启动。第一次启动之后，PDF 路径会记在数据目录里，再启动只要 `python3 server.py`（加上同样的 `--data`）。`serve` 子命令可写可不写。
 
 ## 怎么批注
 

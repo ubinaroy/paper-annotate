@@ -1,4 +1,10 @@
 annotate-data/
+*-data/
 __pycache__/
 *.pyc
 .DS_Store
+
+# demo paper build files (keep demo.tex and demo.pdf)
+examples/demo-paper/*
+!examples/demo-paper/demo.tex
+!examples/demo-paper/demo.pdf

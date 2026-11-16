@@ -97,6 +97,15 @@ def sha1(path: Path) -> str:
     return h.hexdigest()
 
 
+def display_path(p: Path) -> str:
+    """给页面看的路径：在当前目录下就用相对路径，否则把家目录写成 ~。"""
+    try:
+        return str(p.relative_to(Path.cwd()))
+    except ValueError:
+        home = str(Path.home())
+        return "~" + str(p)[len(home):] if str(p).startswith(home) else str(p)
+
+
 def page_sizes(pdf: Path) -> list[list[float]]:
     """有 pdfinfo 就用它；没有的话返回空，由浏览器用 pdf.js 量好再报上来。"""
     if not has("pdfinfo"):
@@ -111,6 +120,9 @@ def page_sizes(pdf: Path) -> list[list[float]]:
 def load_project() -> None:
     """命令行没给 PDF 时，沿用数据目录里记下的 PDF 与源码目录。"""
     proj = read_json(CFG.data / "project.json", {})
+    if CFG.pdf is not None and proj.get("pdf") and Path(proj["pdf"]) != CFG.pdf:
+        raise SystemExit(f"数据目录 {display_path(CFG.data)} 记录的是另一份论文：{proj['pdf']}\n"
+                         f"换论文请用 --data 另开一个目录，例如：python3 server.py {CFG.pdf.name} --data {CFG.pdf.stem}-data")
     if CFG.pdf is None and proj.get("pdf"):
         CFG.pdf = Path(proj["pdf"])
     if CFG.tex_dir is None and proj.get("tex_dir"):
@@ -570,7 +582,7 @@ class Handler(BaseHTTPRequestHandler):
             if not parts or parts == ["index.html"]:
                 return self._file(HERE / "index.html", "text/html; charset=utf-8")
             if parts == ["api", "rounds"]:
-                return self._json({"rounds": list_rounds(), "rounds_dir": str(CFG.data), "live": live_status(),
+                return self._json({"rounds": list_rounds(), "rounds_dir": str(CFG.data), "rounds_dir_display": display_path(CFG.data), "live": live_status(),
                                    "tools": {t: has(t) for t in ("synctex", "pdfinfo", "pdftoppm")}, "default_author": CFG.author})
             if len(parts) >= 4 and parts[:2] == ["api", "r"]:
                 rdir = round_dir(parts[2])
