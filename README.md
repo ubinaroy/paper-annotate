@@ -5,6 +5,17 @@
 - 只依赖 **Python 3.9+ 标准库**，网页用 CDN 上的 pdf.js，不用装任何东西
 - 论文不上传到任何服务器，服务只监听本机
 
+> **最省事的用法：直接交给 AI 来配。** 把这个仓库的地址和你论文的 LaTeX 工程目录一起告诉 Claude Code（或其他能读写文件、能跑命令的 AI），让它照这份 README 编译出带 synctex 的 PDF、启动批注页。你只需要打开它给的地址开始批注。比如：
+>
+> ```text
+> 按 https://github.com/ubinaroy/paper-annotate 的 README，给我的论文配好批注工具。
+> 论文的 LaTeX 工程在 <你的论文目录>。
+> 把工具 clone 到论文目录之外，用 latexmk -pdf -synctex=1 编译出 PDF，再用 server.py 启动，告诉我打开哪个地址。
+> 批注数据放在工具目录里，不要放进论文仓库。
+> ```
+>
+> **批注写完，也交给它改稿**：用下文「交给 AI 改稿」里的两版 prompt。
+
 ![总览：左边是论文，高亮和页边编号是批注；右边是批注列表，带批注人、标签、状态和回复](docs/overview.png)
 
 <table>
