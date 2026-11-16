@@ -322,6 +322,7 @@ async function loadRounds() {
   try {
     const d = await (await fetch("/api/rounds")).json();
     S.rounds = d.rounds || []; S.live = d.live; S.roundsDir = d.rounds_dir || "";
+    if (!S.author && d.default_author) { S.author = d.default_author; showAuthor(); }
   } catch { return; }
   const sel = $("#roundSel"), cur = S.round && S.round.name;
   sel.replaceChildren(...S.rounds.map(r => {

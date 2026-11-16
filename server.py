@@ -49,6 +49,7 @@ class Config:
     data: Path = Path("annotate-data").resolve()
     pdf: Path | None = None
     tex_dir: Path | None = None
+    author: str = ""
 
 
 CFG = Config()
@@ -114,11 +115,15 @@ def load_project() -> None:
         CFG.pdf = Path(proj["pdf"])
     if CFG.tex_dir is None and proj.get("tex_dir"):
         CFG.tex_dir = Path(proj["tex_dir"])
+    if not CFG.author:
+        CFG.author = proj.get("author", "")
     if CFG.pdf is not None and CFG.tex_dir is None:
         CFG.tex_dir = CFG.pdf.parent
     if CFG.pdf is not None:
         CFG.data.mkdir(parents=True, exist_ok=True)
-        write_json(CFG.data / "project.json", {"pdf": str(CFG.pdf), "tex_dir": str(CFG.tex_dir)})
+        new = {"pdf": str(CFG.pdf), "tex_dir": str(CFG.tex_dir), **({"author": CFG.author} if CFG.author else {})}
+        if new != proj:
+            write_json(CFG.data / "project.json", new)
 
 
 def list_rounds() -> list[dict]:
@@ -566,7 +571,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._file(HERE / "index.html", "text/html; charset=utf-8")
             if parts == ["api", "rounds"]:
                 return self._json({"rounds": list_rounds(), "rounds_dir": str(CFG.data), "live": live_status(),
-                                   "tools": {t: has(t) for t in ("synctex", "pdfinfo", "pdftoppm")}})
+                                   "tools": {t: has(t) for t in ("synctex", "pdfinfo", "pdftoppm")}, "default_author": CFG.author})
             if len(parts) >= 4 and parts[:2] == ["api", "r"]:
                 rdir = round_dir(parts[2])
                 meta = read_json(rdir / "meta.json", {})
@@ -647,6 +652,7 @@ def main(argv=None):
     sp = sub.add_parser("serve", parents=[common], help="启动批注网页")
     sp.add_argument("pdf", nargs="?", type=Path, help="论文 PDF（第一次必填，之后沿用）")
     sp.add_argument("--tex-dir", type=Path, help="LaTeX 源码目录（默认 PDF 所在目录）")
+    sp.add_argument("--author", help="默认署名（记在数据目录里；浏览器里改过署名的以浏览器为准）")
     sp.add_argument("--host", default="127.0.0.1")
     sp.add_argument("--port", type=int, default=8791)
     nr = sub.add_parser("new-round", parents=[common], help="用重新编译后的 PDF 开新一轮")
@@ -667,6 +673,8 @@ def main(argv=None):
         CFG.pdf = args.pdf.expanduser().resolve()
     if getattr(args, "tex_dir", None):
         CFG.tex_dir = args.tex_dir.expanduser().resolve()
+    if getattr(args, "author", None):
+        CFG.author = args.author.strip()[:40]
     load_project()
 
     if args.cmd == "new-round":
