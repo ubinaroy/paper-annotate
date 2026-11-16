@@ -89,16 +89,6 @@ python3 server.py path/to/main.pdf
 - **「疑问」只回答**：避免 AI 把提问当成修改指令。
 - **版本 B 全部标「待讨论」**：作者看完回复、拍板之后，再按版本 A 改，或者直接在页面里把状态改成「已改」。
 
-### 命令行
-
-```bash
-python3 server.py reply R03_20261116-2010 7 "已拆成两句" --status done   # 回复人默认 Claude，可用 --by 改
-python3 server.py new-round                                            # 命令行开新一轮
-python3 server.py md R03_20261116-2010                                 # 重新生成并打印 Markdown
-```
-
-回复会在打开着的页面里 5 秒内显示出来。
-
 ## 可选依赖（有就更好用）
 
 | 工具 | 来源 | 没有它时 |
