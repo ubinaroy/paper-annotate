@@ -1,0 +1,1259 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>论文批注</title>
+<style>
+:root {
+  --bg: #f5f5f3; --panel: #ffffff; --ink: #1d1d1f; --ink2: #55555b; --ink3: #8b8b91;
+  --line: #e3e3e0; --soft: #f0f0ed; --viewer: #e4e4e0; --accent: #2f6fde; --accent-soft: rgba(47,111,222,.12);
+  --err: #c7362f; --ok: #2a8a55;
+  --open: #d99a00; --open-hl: rgba(255,190,0,.34);
+  --done: #2a9d5c; --done-hl: rgba(46,170,95,.20);
+  --discuss: #7c4ddb; --discuss-hl: rgba(140,90,230,.22);
+  --pending-hl: rgba(47,111,222,.26);
+  --shadow: 0 1px 3px rgba(0,0,0,.10), 0 6px 18px rgba(0,0,0,.06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1b1b1d; --panel: #242427; --ink: #ececee; --ink2: #b0b0b6; --ink3: #7f7f86;
+    --line: #36363b; --soft: #2c2c30; --viewer: #141416; --accent: #6b98ff; --accent-soft: rgba(107,152,255,.16);
+    --shadow: 0 1px 3px rgba(0,0,0,.5), 0 6px 18px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1b1b1d; --panel: #242427; --ink: #ececee; --ink2: #b0b0b6; --ink3: #7f7f86;
+  --line: #36363b; --soft: #2c2c30; --viewer: #141416; --accent: #6b98ff; --accent-soft: rgba(107,152,255,.16);
+  --shadow: 0 1px 3px rgba(0,0,0,.5), 0 6px 18px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 13px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  display: grid; grid-template-rows: auto auto 1fr; overflow: hidden;
+}
+button, select, textarea { font: inherit; color: inherit; }
+button {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 3px 9px;
+  cursor: pointer; white-space: nowrap;
+}
+button:hover { border-color: var(--ink3); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { border-color: transparent; background: transparent; color: var(--ink2); }
+button.ghost:hover { background: var(--soft); }
+button:disabled { opacity: .45; cursor: default; }
+
+/* ---------- top bar ---------- */
+#bar {
+  display: flex; align-items: center; gap: 10px; padding: 7px 14px; background: var(--panel);
+  border-bottom: 1px solid var(--line); min-width: 0;
+}
+#bar .brand { font-weight: 600; font-size: 14px; }
+#bar select { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 3px 6px; }
+#roundInfo, #pageInfo { color: var(--ink3); font-size: 12px; white-space: nowrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 3px 10px; background: var(--panel); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.zoom { display: inline-flex; align-items: center; gap: 4px; }
+.zoom button { padding: 2px 8px; }
+#zVal { width: 42px; text-align: center; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.grow { flex: 1; }
+#saveState { font-size: 12px; color: var(--ink3); white-space: nowrap; }
+#saveState.ok { color: var(--ok); }
+#saveState.err { color: var(--err); font-weight: 600; }
+
+#banner {
+  padding: 7px 14px; background: color-mix(in srgb, var(--accent) 10%, var(--panel)); border-bottom: 1px solid var(--line);
+  display: flex; gap: 10px; align-items: center; font-size: 12.5px;
+}
+#banner[hidden] { display: none; }
+
+main { display: grid; grid-template-columns: minmax(0,1fr) 7px var(--side-w, 390px); min-height: 0; }
+#splitter { cursor: col-resize; background: var(--line); position: relative; touch-action: none; }
+#splitter::after { content: ""; position: absolute; left: 2px; top: 50%; width: 3px; height: 36px; margin-top: -18px; border-radius: 2px; background: var(--ink3); opacity: .5; }
+#splitter:hover, #splitter.drag { background: var(--accent); }
+#splitter:hover::after, #splitter.drag::after { background: #fff; opacity: .9; }
+body.resizing, body.resizing * { cursor: col-resize !important; user-select: none !important; }
+
+/* ---------- viewer ---------- */
+#viewer { overflow: auto; background: var(--viewer); position: relative; }
+#pages { position: relative; margin: 0 auto; padding: 22px 24px 60vh; width: max-content; min-width: 100%; }
+.page {
+  position: relative; margin: 0 auto 22px; background: #fff; box-shadow: var(--shadow);
+}
+.page .cv, .page .cv canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.page .plabel { position: absolute; top: -17px; right: 0; font-size: 11px; color: var(--ink3); user-select: none; }
+.annoLayer, .badgeLayer, .regionLayer { position: absolute; inset: 0; }
+.annoLayer { z-index: 1; pointer-events: none; }
+.badgeLayer { z-index: 3; pointer-events: none; }
+.regionLayer { z-index: 4; pointer-events: none; }
+#pages.mode-region .regionLayer { pointer-events: auto; cursor: crosshair; }
+#pages.mode-region .textLayer { pointer-events: none; }
+
+/* pdf.js 3.11 text layer (from pdf_viewer.css) */
+.textLayer {
+  position: absolute; text-align: initial; inset: 0; overflow: hidden; line-height: 1;
+  -webkit-text-size-adjust: none; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; z-index: 2;
+}
+.textLayer span, .textLayer br { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; }
+.textLayer span.markedContent { top: 0; height: 0; }
+.textLayer ::selection { background: rgba(47,111,222,.30); }
+.textLayer br::selection { background: transparent; }
+.textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: -1; cursor: default; user-select: none; }
+.textLayer.selecting .endOfContent { top: 0; }
+
+.hl { position: absolute; mix-blend-mode: multiply; border-radius: 2px; }
+.hl.st-open { background: var(--open-hl); }
+.hl.st-done { background: var(--done-hl); }
+.hl.st-discuss { background: var(--discuss-hl); }
+.hl.pending { background: var(--pending-hl); }
+.hl.region { background: transparent !important; border: 1.6px solid var(--open); mix-blend-mode: normal; border-radius: 3px; }
+.hl.region.st-open { background: rgba(255,190,0,.07) !important; }
+.hl.region.st-done { border-color: var(--done); }
+.hl.region.st-discuss { border-color: var(--discuss); }
+.hl.region.pending { border: 1.6px dashed var(--accent); background: rgba(47,111,222,.06) !important; }
+.hl.focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hl.region.focus { outline-offset: 2px; }
+.hl.flash { animation: flash 1.1s ease-out 1; }
+@keyframes flash { 0% { box-shadow: 0 0 0 6px rgba(47,111,222,.55); } 100% { box-shadow: 0 0 0 0 rgba(47,111,222,0); } }
+
+.badge {
+  position: absolute; pointer-events: auto; transform: translate(-50%, -50%);
+  min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; border: 0;
+  font: 600 11px/19px -apple-system, "PingFang SC", sans-serif; color: #fff; background: var(--open);
+  box-shadow: 0 1px 2px rgba(0,0,0,.25); text-align: center; cursor: pointer;
+}
+.badge.st-done { background: var(--done); }
+.badge.st-discuss { background: var(--discuss); }
+.badge.focus { background: var(--accent); box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent); }
+
+/* ---------- composer ---------- */
+.composer {
+  position: absolute; z-index: 20; width: 360px; background: var(--panel); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.12);
+  padding: 10px 11px 9px;
+}
+.composer[hidden] { display: none; }
+.cHead { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; }
+.cHead b { font-size: 12.5px; }
+.cHead .meta { color: var(--ink3); font-size: 11.5px; }
+.cHead .hint { margin-left: auto; color: var(--ink3); font-size: 11px; }
+.quote {
+  border-left: 3px solid var(--line); padding: 1px 0 1px 8px; color: var(--ink2); font-size: 12px;
+  font-family: "Times New Roman", "Songti SC", serif; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;
+}
+.tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 7px; }
+.tag {
+  border: 1px solid var(--line); border-radius: 11px; padding: 0 8px; font-size: 11.5px; line-height: 20px; color: var(--ink2);
+  background: transparent; cursor: pointer;
+}
+.tag.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+textarea {
+  width: 100%; min-height: 78px; resize: vertical; border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px;
+  background: var(--panel); line-height: 1.5; outline: none;
+}
+textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.cFoot { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+.cFoot .kbd { color: var(--ink3); font-size: 11px; margin-right: auto; }
+.shake { animation: shake .35s; }
+@keyframes shake { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+/* ---------- sidebar ---------- */
+#side { border-left: 1px solid var(--line); background: var(--panel); display: grid; grid-template-rows: auto 1fr auto; min-height: 0; }
+.sideHead { padding: 9px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.filters { display: flex; gap: 2px; flex-wrap: wrap; }
+.filters button { border: 0; background: transparent; padding: 2px 7px; border-radius: 5px; color: var(--ink2); font-size: 12px; }
+.filters button.on { background: var(--soft); color: var(--ink); font-weight: 600; }
+.filters .c { color: var(--ink3); font-weight: 400; margin-left: 3px; font-variant-numeric: tabular-nums; }
+#addGlobal { margin-left: auto; font-size: 12px; }
+#list { overflow: auto; padding: 8px 10px 30px; }
+.empty { color: var(--ink3); padding: 18px 8px; line-height: 1.8; font-size: 12.5px; }
+.empty kbd, .help kbd {
+  font: 11px/1 ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+  padding: 1px 4px; background: var(--soft); color: var(--ink2);
+}
+.group { font-size: 11.5px; color: var(--ink3); margin: 10px 4px 4px; font-weight: 600; letter-spacing: .02em; }
+.card {
+  border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px 7px; margin: 0 0 7px; background: var(--panel); cursor: pointer;
+  position: relative;
+}
+.card:hover { border-color: var(--ink3); }
+.card.focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.card.deleted { display: none; }
+.cardHead { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink3); margin-bottom: 4px; min-width: 0; }
+.cardHead .num { color: #fff; background: var(--open); border-radius: 9px; padding: 0 6px; font-weight: 600; line-height: 17px; }
+.card.st-done .num { background: var(--done); }
+.card.st-discuss .num { background: var(--discuss); }
+.cardHead .src { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cardHead .t { color: var(--accent); }
+.cardHead .who { color: var(--ink2); font-weight: 600; }
+#authorSel { border: 1px solid var(--line); background: var(--panel); border-radius: 5px; font-size: 12px; padding: 1px 4px; color: var(--ink2); }
+#importFile { display: none; }
+.comment { white-space: pre-wrap; word-break: break-word; margin-top: 5px; font-size: 13px; }
+.comment.blank { color: var(--ink3); font-style: italic; }
+.reply {
+  margin-top: 6px; padding: 5px 8px; border-radius: 6px; background: var(--soft); font-size: 12.5px; white-space: pre-wrap; word-break: break-word;
+}
+.reply b { color: var(--ink2); font-size: 11.5px; }
+.cardFoot { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.cardFoot .seg button { font-size: 11px; padding: 1px 7px; }
+.cardFoot .seg button.on.s-open { color: var(--open); background: rgba(255,190,0,.14); }
+.cardFoot .seg button.on.s-done { color: var(--done); background: rgba(46,170,95,.14); }
+.cardFoot .seg button.on.s-discuss { color: var(--discuss); background: rgba(140,90,230,.14); }
+.cardFoot .ghost { font-size: 11.5px; padding: 1px 6px; }
+.cardFoot .sp { flex: 1; }
+.sideFoot { border-top: 1px solid var(--line); padding: 8px 12px; font-size: 11.5px; color: var(--ink3); line-height: 1.6; }
+.sideFoot code { font: 10.5px ui-monospace, Menlo, monospace; color: var(--ink2); word-break: break-all; }
+.help { margin-top: 4px; }
+
+#loading { position: absolute; top: 40%; left: 50%; transform: translate(-50%,-50%); color: var(--ink3); }
+#toast {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none;
+  background: #222; color: #fff; padding: 7px 12px; border-radius: 8px; font-size: 12.5px; transition: .18s; z-index: 50;
+  display: flex; gap: 10px; align-items: center; max-width: 80vw;
+}
+#toast.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+#toast button { background: transparent; color: #9cc0ff; border: 0; padding: 0; font-weight: 600; }
+
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; grid-template-rows: 1fr 40vh; }
+  #splitter { display: none; }
+  #side { border-left: 0; border-top: 1px solid var(--line); }
+  #bar { flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<header id="bar">
+  <span class="brand">论文批注</span>
+  <select id="roundSel" title="批注轮次：每轮对应一份 PDF 快照"></select>
+  <span id="roundInfo"></span>
+  <div class="seg" id="modeSeg">
+    <button data-mode="text" class="on" title="点一下 = 整句；拖动 = 任意文字（快捷键 T）">句子 / 文字</button>
+    <button data-mode="region" title="拖一个框：图、表、公式、整段（快捷键 R；文字模式下按住 ⌥ 拖动也行）">框选区域</button>
+  </div>
+  <div class="zoom">
+    <button id="zOut" title="缩小：⌘− / 双指捏合 / Ctrl+滚轮">−</button><span id="zVal">100%</span><button id="zIn" title="放大：⌘+ / 双指张开 / Ctrl+滚轮">+</button>
+    <button id="zFit" title="适合宽度（⌘0）">适宽</button>
+  </div>
+  <span id="pageInfo"></span>
+  <span class="grow"></span>
+  <span id="saveState"></span>
+  <button id="authorBtn" class="ghost" title="署名会写进你新建的每条批注">署名：未设置</button>
+  <button id="exportBtn" title="把本轮批注导出成文件，发给论文作者">导出</button>
+  <button id="importBtn" title="导入别人发来的批注文件，合并进来">导入</button>
+  <input id="importFile" type="file" accept=".json,application/json">
+  <button id="copyMd" title="把本轮全部批注（Markdown）复制到剪贴板">复制 Markdown</button>
+</header>
+<div id="banner" hidden></div>
+<main>
+  <div id="viewer"><div id="pages"></div><div id="loading">加载 PDF…</div></div>
+  <div id="splitter" title="拖动调整侧栏宽度；双击恢复默认"></div>
+  <aside id="side">
+    <div class="sideHead">
+      <div class="filters" id="filters"></div>
+      <button id="addGlobal" title="不针对某句话的整体意见">+ 整体意见</button>
+    </div>
+    <div id="list"></div>
+    <div class="sideFoot" id="sideFoot"></div>
+  </aside>
+</main>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>
+"use strict";
+const PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/";
+pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.js";
+
+const TAGS = ["改写", "删减", "逻辑", "疑问", "图表", "格式"];
+const STATUS = { open: "未处理", done: "已改", discuss: "待讨论" };
+const KIND = { sentence: "句子", text: "文字", region: "区域", global: "整体意见" };
+const CLIENT_FIELDS = ["n", "kind", "page", "rects", "quote", "ctx", "comment", "tag", "author", "created", "updated", "deleted"];
+const SERVER_FIELDS = ["source", "crop", "reply", "reply_at", "reply_by", "_geo"];
+const ABBR = new Set(["e.g.", "i.e.", "al.", "fig.", "figs.", "eq.", "eqs.", "tab.", "tabs.", "sec.", "secs.", "vs.", "cf.",
+  "resp.", "approx.", "no.", "ref.", "refs.", "app.", "alg.", "ch.", "ex.", "w.r.t.", "i.i.d.", "avg.", "std.", "et."]);
+
+const $ = (s, r = document) => r.querySelector(s);
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+const pad = (n, w = 2) => String(Math.floor(Math.abs(n))).padStart(w, "0");
+function isoNow() {
+  const d = new Date(), off = -d.getTimezoneOffset();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}${off >= 0 ? "+" : "-"}${pad(off / 60)}:${pad(off % 60)}`;
+}
+const hhmm = iso => (iso || "").slice(5, 16).replace("T", " ");
+const newId = () => "a" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+const S = {
+  rounds: [], roundsDir: "", live: null, round: null, pdf: null, pages: [],
+  scale: 1.4, fit: true, mode: "text", items: [], focusId: null, editingId: null, filter: "all",
+  pending: null, dirty: false, saveT: null, savePromise: null, listStale: false, down: null, clickT: null,
+  author: (() => { try { return localStorage.getItem("paper-annotate:author") || ""; } catch { return ""; } })(), who: "",
+};
+const viewer = $("#viewer"), pagesEl = $("#pages"), listEl = $("#list");
+
+// ------------------------------------------------------------------ boot
+async function boot() {
+  try {
+    const z = JSON.parse(localStorage.getItem("paper-annotate:zoom") || "null");
+    if (z) { S.fit = !!z.fit; if (!z.fit && z.scale) S.scale = clamp(z.scale, 0.5, 4); }
+  } catch {}
+  buildComposer();
+  wireUi();
+  await loadRounds();
+  const q = new URLSearchParams(location.search).get("round");
+  let last = null; try { last = localStorage.getItem("paper-annotate:last"); } catch {}
+  const pick = [q, last].find(n => n && S.rounds.some(r => r.name === n)) || (S.rounds.at(-1) || {}).name;
+  if (!pick) { $("#loading").textContent = "还没有批注轮次：先运行 python3 server.py"; return; }
+  await openRound(pick);
+  setInterval(poll, 5000);
+  setInterval(loadRounds, 20000);
+}
+
+async function loadRounds() {
+  try {
+    const d = await (await fetch("/api/rounds")).json();
+    S.rounds = d.rounds || []; S.live = d.live; S.roundsDir = d.rounds_dir || "";
+  } catch { return; }
+  const sel = $("#roundSel"), cur = S.round && S.round.name;
+  sel.replaceChildren(...S.rounds.map(r => {
+    const o = el("option", null, `${r.name.slice(0, 3)} · PDF ${hhmm(r.pdf_mtime)}`); o.value = r.name; return o;
+  }));
+  if (cur) sel.value = cur;
+  updateBanner();
+}
+
+async function openRound(name) {
+  const meta = S.rounds.find(r => r.name === name);
+  if (!meta) return;
+  if (S.round && (S.dirty || S.savePromise)) await save();
+  closeComposer();
+  S.round = meta; S.items = []; S.focusId = null; S.editingId = null;
+  history.replaceState(null, "", "?round=" + encodeURIComponent(meta.name));
+  try { localStorage.setItem("paper-annotate:last", meta.name); } catch {}
+  $("#roundSel").value = meta.name;
+  $("#sideFoot").innerHTML = "";
+  const foot = $("#sideFoot");
+  foot.append("自动保存到 ", el("code", null, `${S.roundsDir}/${meta.name}/annotations.md`), "，可以直接交给 Claude 等 AI 改稿。别人的批注用「导入」合并。");
+  const help = el("div", "help");
+  help.innerHTML = "<kbd>点击</kbd> 整句 · <kbd>⇧点击</kbd> 延伸 · <kbd>拖选</kbd> 任意文字 · <kbd>R</kbd>/<kbd>⌥拖</kbd> 框区域 · <kbd>J</kbd><kbd>K</kbd> 上下条 · <kbd>⌘↵</kbd> 保存 · 捏合 / <kbd>⌘±</kbd> 缩放";
+  foot.append(help);
+
+  pagesEl.replaceChildren(composer);
+  if (S.pdf) { S.pdf.destroy(); S.pdf = null; }
+  $("#loading").hidden = false; $("#loading").textContent = "加载 PDF…";
+  let pdf;
+  try {
+    pdf = await pdfjsLib.getDocument({ url: `/api/r/${encodeURIComponent(meta.name)}/pdf` }).promise;
+  } catch (e) { $("#loading").textContent = "PDF 加载失败：" + e.message; return; }
+  if (!meta.page_sizes || !meta.page_sizes.length) {
+    // 服务端没有 pdfinfo：用 pdf.js 量页面尺寸，并报给服务端（synctex / 截图要用）
+    const sizes = [];
+    for (let i = 1; i <= pdf.numPages; i++) { const v = (await pdf.getPage(i)).getViewport({ scale: 1 }); sizes.push([v.width, v.height]); }
+    meta.page_sizes = sizes;
+    fetch(`/api/r/${encodeURIComponent(meta.name)}/page-sizes`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sizes }) }).catch(() => {});
+  }
+  $("#roundInfo").textContent = `${meta.page_sizes.length} 页 · 快照于 ${hhmm(meta.created)}`;
+  S.pages = meta.page_sizes.map(([w, h], i) => makePage(i + 1, w, h));
+  fitScale(); layout();
+  S.pdf = pdf;
+  $("#loading").hidden = true;
+  schedule();
+  await loadItems();
+  drawAnno(); renderList(); updateBanner(); updatePageInfo();
+}
+
+function makePage(num, w0, h0) {
+  const div = el("div", "page"); div.dataset.p = num;
+  const pg = { num, w0, h0, div, cv: el("div", "cv"), anno: el("div", "annoLayer"), text: el("div", "textLayer"),
+    badges: el("div", "badgeLayer"), region: el("div", "regionLayer"), renderedScale: 0, textBuilt: false, visible: false, model: null };
+  div.append(pg.cv, pg.anno, pg.text, pg.badges, pg.region, el("div", "plabel", `第 ${num} 页`));
+  pg.region.addEventListener("pointerdown", e => startRegion(e, pg));
+  pagesEl.append(div);
+  return pg;
+}
+
+// ------------------------------------------------------------------ zoom / render
+function fitScale() {
+  const maxW = Math.max(...S.pages.map(p => p.w0));
+  const avail = viewer.clientWidth - 64;
+  if (S.fit) S.scale = clamp(avail / maxW, 0.6, 2.4);
+}
+function layout() {
+  for (const pg of S.pages) {
+    pg.div.style.width = pg.w0 * S.scale + "px";
+    pg.div.style.height = pg.h0 * S.scale + "px";
+    pg.div.style.setProperty("--scale-factor", S.scale);
+  }
+  $("#zVal").textContent = Math.round(S.scale / (96 / 72) * 100) + "%";
+  placeComposer();
+}
+// 以 (cx, cy)（屏幕坐标，默认视窗中心）为锚点缩放：锚点下的那处内容缩放后仍在原位
+function setZoom(next, fit = false, cx, cy) {
+  if (!S.pages.length) return;
+  const vr = viewer.getBoundingClientRect();
+  if (cx == null) { cx = vr.left + viewer.clientWidth / 2; cy = vr.top + viewer.clientHeight / 2; }
+  const ox = cx - vr.left, oy = cy - vr.top;
+  const px = viewer.scrollLeft + ox, py = viewer.scrollTop + oy;
+  const pg = S.pages.find(p => p.div.offsetTop + p.div.offsetHeight > py) || S.pages.at(-1);
+  const fx = (px - pg.div.offsetLeft) / pg.div.offsetWidth, fy = (py - pg.div.offsetTop) / pg.div.offsetHeight;
+  S.fit = fit;
+  if (fit) fitScale(); else S.scale = clamp(next, 0.5, 4);
+  layout();
+  viewer.scrollTop = pg.div.offsetTop + fy * pg.div.offsetHeight - oy;
+  viewer.scrollLeft = pg.div.offsetLeft + fx * pg.div.offsetWidth - ox;
+  // 连续捏合时只拉伸现有画布，停手 180ms 后再按新倍率重画
+  S.zooming = true;
+  clearTimeout(S.zoomT);
+  S.zoomT = setTimeout(() => { S.zooming = false; schedule(); updatePageInfo(); }, 180);
+  try { localStorage.setItem("paper-annotate:zoom", JSON.stringify({ fit: S.fit, scale: S.scale })); } catch {}
+}
+let renderBusy = false;
+function schedule() {
+  if (renderBusy || !S.pdf) return;
+  const top = viewer.scrollTop - 900, bot = viewer.scrollTop + viewer.clientHeight + 900;
+  for (const p of S.pages) p.visible = p.div.offsetTop + p.div.offsetHeight > top && p.div.offsetTop < bot;
+  const mid = viewer.scrollTop + viewer.clientHeight / 2;
+  const todo = S.pages.filter(p => p.visible && (p.renderedScale !== S.scale || !p.textBuilt))
+    .sort((a, b) => Math.abs(a.div.offsetTop - mid) - Math.abs(b.div.offsetTop - mid));
+  if (!todo.length) { evict(); return; }
+  renderBusy = true;
+  renderPage(todo[0]).catch(e => console.error(e)).finally(() => { renderBusy = false; schedule(); });
+}
+async function renderPage(pg) {
+  const pdf = S.pdf, scale = S.scale;
+  const page = await pdf.getPage(pg.num);
+  const vp = page.getViewport({ scale });
+  if (!pg.textBuilt) {
+    const tc = await page.getTextContent();
+    if (pdf !== S.pdf) return;
+    pg.text.replaceChildren();
+    // 文字层与缩放无关（靠 --scale-factor 缩放），但建层时 viewport 要等于当前的 --scale-factor
+    await pdfjsLib.renderTextLayer({ textContentSource: tc, container: pg.text, viewport: page.getViewport({ scale: S.scale }), textDivs: [] }).promise;
+    pg.text.append(el("div", "endOfContent"));
+    pg.textBuilt = true; pg.model = null;
+  }
+  if (pg.renderedScale !== scale) {
+    const dpr = window.devicePixelRatio || 1;
+    const c = document.createElement("canvas");
+    c.width = Math.floor(vp.width * dpr); c.height = Math.floor(vp.height * dpr);
+    await page.render({ canvasContext: c.getContext("2d", { alpha: false }), viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null }).promise;
+    if (pdf !== S.pdf) return;
+    pg.cv.replaceChildren(c);
+    pg.renderedScale = scale;
+  }
+}
+function evict() {
+  const live = S.pages.filter(p => p.renderedScale);
+  if (live.length <= 12) return;
+  const mid = viewer.scrollTop + viewer.clientHeight / 2;
+  live.filter(p => !p.visible).sort((a, b) => Math.abs(b.div.offsetTop - mid) - Math.abs(a.div.offsetTop - mid))
+    .slice(0, live.length - 12).forEach(p => { p.cv.replaceChildren(); p.renderedScale = 0; });
+}
+function updatePageInfo() {
+  const mid = viewer.scrollTop + viewer.clientHeight * 0.35;
+  const pg = S.pages.find(p => p.div.offsetTop + p.div.offsetHeight + 11 > mid);
+  $("#pageInfo").textContent = pg ? `第 ${pg.num} / ${S.pages.length} 页` : "";
+}
+
+// ------------------------------------------------------------------ page text model + sentences
+function model(pg) {
+  if (pg.model) return pg.model;
+  const pr = pg.div.getBoundingClientRect(), W = pr.width, H = pr.height;
+  const spans = [], idx = new Map();
+  for (const e of pg.text.querySelectorAll("span")) {
+    if (e.classList.contains("markedContent")) continue;
+    const node = e.firstChild;
+    if (!node || node.nodeType !== 3 || !node.textContent) continue;
+    const r = e.getBoundingClientRect();
+    if (!r.width && !r.height) continue;
+    const nr = [(r.left - pr.left) / W, (r.top - pr.top) / H, (r.right - pr.left) / W, (r.bottom - pr.top) / H];
+    const s = node.textContent, cx = (nr[0] + nr[2]) / 2, cy = (nr[1] + nr[3]) / 2;
+    // 页眉（CVPR / CONFIDENTIAL…）、页脚、审稿行号不参与断句
+    const skip = cy < 0.062 || cy > 0.958 || (/^\s*\d{3}\s*$/.test(s) && (cx < 0.09 || cx > 0.91)) ||
+      (/^\s*\d{1,2}\s*$/.test(s) && cy > 0.9 && cx > 0.4 && cx < 0.6);
+    const eol = !!(e.nextSibling && e.nextSibling.nodeName === "BR");
+    idx.set(e, spans.length);
+    spans.push({ e, node, s, nr, skip, eol, start: -1, end: -1 });
+  }
+  // 1) 按几何位置分行（pdf.js 不总给行尾标记，行间常常只是一个空格 span）
+  const lines = []; let cur = null, forceNew = false;
+  for (const sp of spans) {
+    if (sp.skip) continue;
+    if (!sp.s.trim()) { sp.line = cur ? cur.id : -1; if (sp.eol) forceNew = true; continue; }
+    const h = sp.nr[3] - sp.nr[1], cy = (sp.nr[1] + sp.nr[3]) / 2;
+    const same = cur && !forceNew && Math.abs(cy - cur.cy) < 0.5 * Math.max(h, cur.h0) && sp.nr[0] >= cur.x1 - 0.02;
+    if (!same) { cur = { id: lines.length, cy, h0: h, x0: 1, x1: 0, y0: 1, y1: 0, hs: [], start: -1 }; lines.push(cur); }
+    forceNew = sp.eol;
+    sp.line = cur.id;
+    cur.x0 = Math.min(cur.x0, sp.nr[0]); cur.x1 = Math.max(cur.x1, sp.nr[2]);
+    cur.y0 = Math.min(cur.y0, sp.nr[1]); cur.y1 = Math.max(cur.y1, sp.nr[3]);
+    cur.hs.push(h);
+  }
+  // 2) 拼页面文字：换行处补空格；行尾连字符后的换行空格去掉
+  let text = "", last = null;
+  const hyph = new Set();   // 行尾断词连字符的位置（引文里去掉）
+  spans.forEach((sp, i) => {
+    if (sp.skip) return;
+    if (!sp.s.trim()) {
+      let j = i + 1; while (j < spans.length && (spans[j].skip || !spans[j].s.trim())) j++;
+      const nxt = spans[j];
+      if (last && nxt && nxt.line !== last.line && /[-‐]$/.test(last.s)) { sp.skip = true; return; }
+      sp.start = text.length; text += sp.s; sp.end = text.length; return;
+    }
+    if (last && sp.line !== last.line && /[a-z][-‐]$/.test(last.s) && /^[a-z]/.test(sp.s)) hyph.add(last.end - 1);
+    if (last && sp.line !== last.line && !/\s$/.test(text) && !/[-‐]$/.test(last.s)) text += " ";
+    sp.start = text.length; text += sp.s; sp.end = text.length;
+    if (lines[sp.line].start < 0) lines[sp.line].start = sp.start;
+    last = sp;
+  });
+  const med = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[s.length >> 1] : 0; };
+  lines.forEach(L => { L.h = med(L.hs) || (L.y1 - L.y0); L.w = L.x1 - L.x0; });
+  const medW = med(lines.filter(L => L.w > 0.2).map(L => L.w)) || 0.4;
+  const B = new Set([0]);
+  for (let k = 1; k < lines.length; k++) {
+    const A = lines[k - 1], L = lines[k];
+    const hJump = Math.abs(L.h - A.h) / Math.max(A.h, 1e-6) > 0.12;      // 标题 / 图注字号变化
+    const gap = L.y0 > A.y0 && L.y0 - A.y1 > 0.9 * A.h;                    // 同栏内大间距（公式、浮动体）
+    const short = A.w < 0.6 * medW;                                        // 上一行是短行（段尾、标题、公式行）
+    if (hJump || gap || short) B.add(L.start);
+  }
+  const re = /[.?!]['")\]’”]*\s+(?=[A-Z0-9(\[“"‘'\\])/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const tok = (text.slice(Math.max(0, m.index - 14), m.index + 1).match(/(\S+)$/) || ["", ""])[1].replace(/^[(\[“"‘]+/, "");
+    if (ABBR.has(tok.toLowerCase()) || /^[A-Z]\.$/.test(tok)) continue;
+    B.add(m.index + m[0].length);
+  }
+  const bs = [...B].filter(b => b < text.length).sort((a, b) => a - b), keep = [];
+  for (const b of bs) {
+    if (keep.length && /^[\d.\s§()]{0,7}$/.test(text.slice(keep.at(-1), b))) continue;  // “3.” 这种编号并进下一句
+    keep.push(b);
+  }
+  const mdl = { spans, idx, text, bounds: keep, hyph };
+  if (pg.textBuilt) pg.model = mdl;
+  return mdl;
+}
+function sentenceAt(pg, g) {
+  const m = model(pg), b = m.bounds;
+  let lo = 0;
+  for (let i = 0; i < b.length; i++) if (b[i] <= g) lo = i; else break;
+  let s = b[lo], e = lo + 1 < b.length ? b[lo + 1] : m.text.length;
+  while (s < e && /\s/.test(m.text[s])) s++;
+  while (e > s && /\s/.test(m.text[e - 1])) e--;
+  return [s, e];
+}
+function offsetAtPoint(pg, cx, cy) {
+  const m = model(pg), pr = pg.div.getBoundingClientRect();
+  const x = (cx - pr.left) / pr.width, y = (cy - pr.top) / pr.height;
+  let r = null;
+  if (document.caretRangeFromPoint) r = document.caretRangeFromPoint(cx, cy);
+  else if (document.caretPositionFromPoint) {
+    const p = document.caretPositionFromPoint(cx, cy);
+    if (p) { r = document.createRange(); r.setStart(p.offsetNode, p.offset); }
+  }
+  if (r && r.startContainer.nodeType === 3) {
+    const i = m.idx.get(r.startContainer.parentElement);
+    const sp = i != null ? m.spans[i] : null;
+    if (sp && !sp.skip && y >= sp.nr[1] - 0.004 && y <= sp.nr[3] + 0.004) return sp.start + Math.min(r.startOffset, sp.s.length);
+  }
+  let best = null, bd = 1e9;
+  for (const sp of m.spans) {
+    if (sp.skip || !sp.s.trim() || y < sp.nr[1] - 0.002 || y > sp.nr[3] + 0.002) continue;
+    const d = x < sp.nr[0] ? sp.nr[0] - x : x > sp.nr[2] ? x - sp.nr[2] : 0;
+    if (d < bd) { bd = d; best = sp; }
+  }
+  if (!best || bd > 0.02) return null;
+  const f = clamp((x - best.nr[0]) / Math.max(1e-6, best.nr[2] - best.nr[0]), 0, 0.999);
+  return best.start + Math.floor(f * best.s.length);
+}
+function rectsFor(pg, g0, g1) {
+  const m = model(pg), pr = pg.div.getBoundingClientRect(), out = [];
+  m.spans.forEach((sp, i) => {
+    if (sp.skip || sp.end <= g0 || sp.start >= g1) return;
+    const a = Math.max(g0, sp.start) - sp.start, b = Math.min(g1, sp.end) - sp.start;
+    if (a === 0 && b === sp.s.length) { if (sp.s.trim()) out.push([...sp.nr, i]); return; }
+    if (!sp.s.slice(a, b).trim()) return;
+    const r = document.createRange(); r.setStart(sp.node, a); r.setEnd(sp.node, b);
+    for (const c of r.getClientRects()) {
+      if (c.width < 0.5 || c.height < 0.5) continue;
+      out.push([(c.left - pr.left) / pr.width, (c.top - pr.top) / pr.height, (c.right - pr.left) / pr.width, (c.bottom - pr.top) / pr.height, i]);
+    }
+  });
+  return mergeRects(out).map(r => [pg.num, ...r.map(v => +v.toFixed(5))]);
+}
+function mergeRects(rs) {
+  const lines = [];
+  for (const r of rs) {
+    const cy = (r[1] + r[3]) / 2, h = r[3] - r[1];
+    const L = lines.find(L => Math.abs(cy - (L[1] + L[3]) / 2) < 0.5 * Math.min(h, L[3] - L[1]) && r[0] <= L[2] + 0.012 && r[2] >= L[0] - 0.012);
+    if (L) { L[0] = Math.min(L[0], r[0]); L[1] = Math.min(L[1], r[1]); L[2] = Math.max(L[2], r[2]); L[3] = Math.max(L[3], r[3]); L[4] = Math.min(L[4], r[4]); }
+    else lines.push([...r]);
+  }
+  return lines.sort((a, b) => a[4] - b[4]).map(l => l.slice(0, 4));
+}
+function pointToGlobal(pg, node, off, isEnd) {
+  const m = model(pg);
+  if (node.nodeType === 3) {
+    const i = m.idx.get(node.parentElement);
+    if (i != null && !m.spans[i].skip) return m.spans[i].start + Math.min(off, m.spans[i].s.length);
+  }
+  const r = document.createRange();
+  try { r.setStart(node, off); } catch { return null; }
+  const inc = m.spans.filter(sp => !sp.skip);
+  if (!isEnd) { const sp = inc.find(sp => r.comparePoint(sp.node, 0) >= 0); return sp ? sp.start : m.text.length; }
+  const before = inc.filter(sp => r.comparePoint(sp.node, sp.s.length) <= 0);
+  return before.length ? before.at(-1).end : 0;
+}
+function textSlice(pg, g0, g1) {
+  const m = model(pg);
+  let t = "";
+  for (let i = g0; i < g1; i++) if (!m.hyph.has(i)) t += m.text[i];
+  return t.replace(/\s+/g, " ").trim();
+}
+function ctxOf(pg, g0, g1) {
+  const n = model(pg).text.length;
+  return { before: textSlice(pg, Math.max(0, g0 - 80), g0), after: textSlice(pg, g1, Math.min(n, g1 + 80)) };
+}
+
+// ------------------------------------------------------------------ creating annotations
+function pendingFromSegs(kind, segs) {
+  const rects = [], parts = [];
+  for (const sg of segs) { const pg = S.pages[sg.p - 1]; rects.push(...rectsFor(pg, sg.g0, sg.g1)); parts.push(textSlice(pg, sg.g0, sg.g1)); }
+  const f = segs[0], l = segs.at(-1);
+  const c0 = ctxOf(S.pages[f.p - 1], f.g0, f.g1), c1 = ctxOf(S.pages[l.p - 1], l.g0, l.g1);
+  return { kind, page: f.p, segs, rects, quote: parts.join(" "), ctx: { before: c0.before, after: c1.after } };
+}
+function onSentenceClick(pg, cx, cy, shift) {
+  const pr = pg.div.getBoundingClientRect();
+  const x = (cx - pr.left) / pr.width, y = (cy - pr.top) / pr.height;
+  const hit = !shift && hitTest(pg, x, y, false);
+  if (hit && hit.id !== S.focusId) { focusItem(hit.id, { list: true }); return; }
+  const g = offsetAtPoint(pg, cx, cy);
+  if (g == null) { if (S.pending && !composerText()) closeComposer(); return; }
+  const [s, e] = sentenceAt(pg, g);
+  if (e <= s) return;
+  const P = S.pending;
+  if (shift && P && P.kind !== "region" && P.segs.length === 1 && P.segs[0].p === pg.num) {
+    const sg = P.segs[0];
+    openComposer(pendingFromSegs(P.kind, [{ p: pg.num, g0: Math.min(sg.g0, s), g1: Math.max(sg.g1, e) }]), true);
+    return;
+  }
+  if (P && composerText()) { nudgeComposer(); return; }
+  openComposer(pendingFromSegs("sentence", [{ p: pg.num, g0: s, g1: e }]));
+}
+function onSelection(range) {
+  const pgs = S.pages.filter(p => p.textBuilt && range.intersectsNode(p.text));
+  if (!pgs.length) return false;
+  const segs = [];
+  for (const pg of pgs) {
+    const inStart = pg.text.contains(range.startContainer), inEnd = pg.text.contains(range.endContainer);
+    const m = model(pg);
+    const g0 = inStart ? pointToGlobal(pg, range.startContainer, range.startOffset, false) : 0;
+    const g1 = inEnd ? pointToGlobal(pg, range.endContainer, range.endOffset, true) : m.text.length;
+    if (g0 == null || g1 == null || g1 <= g0 || !m.text.slice(g0, g1).trim()) continue;
+    let a = g0, b = g1;
+    const w = c => /[\p{L}\p{N}]/u.test(c || "");
+    while (a > 0 && w(m.text[a - 1]) && w(m.text[a])) a--;                 // 拖选首尾吸附到整词
+    while (b < m.text.length && w(m.text[b - 1]) && w(m.text[b])) b++;
+    while (a < b && /\s/.test(m.text[a])) a++;
+    while (b > a && /\s/.test(m.text[b - 1])) b--;
+    segs.push({ p: pg.num, g0: a, g1: b });
+  }
+  if (!segs.length) return false;
+  if (S.pending && composerText()) { nudgeComposer(); return true; }
+  openComposer(pendingFromSegs("text", segs));
+  return true;
+}
+function regionText(pg, r) {
+  const m = model(pg);
+  let out = "", prev = null;
+  for (const sp of m.spans) {
+    if (sp.skip) continue;
+    const cx = (sp.nr[0] + sp.nr[2]) / 2, cy = (sp.nr[1] + sp.nr[3]) / 2;
+    if (!(cx >= r[0] && cx <= r[2] && cy >= r[1] && cy <= r[3])) continue;
+    if (prev && sp.line !== prev.line && sp.s.trim()) {
+      if (/[a-z][-‐]$/.test(out) && /^[a-z]/.test(sp.s)) out = out.slice(0, -1);   // 行尾断词连字符
+      else if (!/\s$/.test(out)) out += " ";
+    }
+    out += sp.s;
+    if (sp.s.trim()) prev = sp;
+  }
+  return out.replace(/\s+/g, " ").trim().slice(0, 1500);
+}
+function startRegion(e, pg) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const pr = pg.div.getBoundingClientRect();
+  const p0 = [clamp((e.clientX - pr.left) / pr.width, 0, 1), clamp((e.clientY - pr.top) / pr.height, 0, 1)];
+  const box = el("div", "hl region pending"); pg.anno.append(box);
+  let r = [p0[0], p0[1], p0[0], p0[1]];
+  const move = ev => {
+    const x = clamp((ev.clientX - pr.left) / pr.width, 0, 1), y = clamp((ev.clientY - pr.top) / pr.height, 0, 1);
+    r = [Math.min(p0[0], x), Math.min(p0[1], y), Math.max(p0[0], x), Math.max(p0[1], y)];
+    Object.assign(box.style, { left: r[0] * 100 + "%", top: r[1] * 100 + "%", width: (r[2] - r[0]) * 100 + "%", height: (r[3] - r[1]) * 100 + "%" });
+  };
+  const up = ev => {
+    window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+    box.remove();
+    if ((r[2] - r[0]) * pr.width < 6 || (r[3] - r[1]) * pr.height < 6) {
+      const hit = hitTest(pg, p0[0], p0[1], true);
+      if (hit) focusItem(hit.id, { list: true });
+      else if (S.pending && !composerText()) closeComposer();
+      return;
+    }
+    if (S.pending && composerText()) { nudgeComposer(); return; }
+    openComposer({ kind: "region", page: pg.num, segs: [], rects: [[pg.num, ...r.map(v => +v.toFixed(5))]], quote: pg.textBuilt ? regionText(pg, r) : "", ctx: null });
+  };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+}
+function hitTest(pg, x, y, insideRegions) {
+  const tolX = 5 / pg.div.offsetWidth, tolY = 5 / pg.div.offsetHeight;
+  const items = liveItems().filter(it => it.rects && it.rects.some(r => r[0] === pg.num));
+  for (const it of items) {
+    if (it.kind === "region") continue;
+    for (const r of it.rects) if (r[0] === pg.num && x >= r[1] - tolX && x <= r[3] + tolX && y >= r[2] - tolY && y <= r[4] + tolY) return it;
+  }
+  for (const it of items) {
+    if (it.kind !== "region") continue;
+    const [, x0, y0, x1, y1] = it.rects[0];
+    const inside = x >= x0 - tolX && x <= x1 + tolX && y >= y0 - tolY && y <= y1 + tolY;
+    const deep = x > x0 + 2 * tolX && x < x1 - 2 * tolX && y > y0 + 2 * tolY && y < y1 - 2 * tolY;
+    if (inside && (insideRegions || !deep)) return it;
+  }
+  return null;
+}
+
+// ------------------------------------------------------------------ composer
+let composer;
+function buildComposer() {
+  composer = el("div", "composer"); composer.hidden = true;
+  composer.innerHTML = `<div class="cHead"><b class="k"></b><span class="meta"></span><span class="hint"></span></div>
+    <div class="quote"></div><div class="tags"></div>
+    <textarea placeholder="写批注……（⌘↵ 保存，Esc 取消）"></textarea>
+    <div class="cFoot"><span class="kbd">⌘↵ 保存 · Esc 取消</span><button class="ghost c-cancel">取消</button><button class="primary c-save">保存</button></div>`;
+  composer.addEventListener("mousedown", e => e.stopPropagation());
+  composer.addEventListener("mouseup", e => e.stopPropagation());
+  composer.querySelector(".tags").append(...tagButtons(() => composer.dataset.tag || "", t => { composer.dataset.tag = t; }));
+  composer.querySelector(".c-cancel").onclick = () => closeComposer();
+  composer.querySelector(".c-save").onclick = commitComposer;
+  composer.querySelector("textarea").addEventListener("keydown", e => {
+    if (e.isComposing) return;
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commitComposer(); }
+    else if (e.key === "Escape") { e.preventDefault(); closeComposer(); }
+  });
+}
+function tagButtons(get, set) {
+  return TAGS.map(t => {
+    const b = el("button", "tag", t); b.type = "button";
+    b.onclick = e => { e.stopPropagation(); const v = get() === t ? "" : t; set(v); b.parentElement.querySelectorAll(".tag").forEach(x => x.classList.toggle("on", x.textContent === v)); };
+    return b;
+  });
+}
+const composerText = () => composer && !composer.hidden && composer.querySelector("textarea").value.trim();
+function openComposer(p, keepText = false) {
+  S.pending = p;
+  window.getSelection().removeAllRanges();
+  composer.querySelector(".k").textContent = { sentence: "句子批注", text: "文字批注", region: "区域批注" }[p.kind];
+  composer.querySelector(".meta").textContent = `第 ${p.page} 页${p.segs.length > 1 ? " 起，跨页" : ""}`;
+  composer.querySelector(".hint").textContent = p.kind === "sentence" ? "⇧点击 延伸到别的句子" : "";
+  const q = composer.querySelector(".quote");
+  q.textContent = p.kind === "region" ? (p.quote ? "区域内文字：" + p.quote : "（区域内没有可提取的文字，如纯图片）") : p.quote;
+  if (!keepText) {
+    composer.querySelector("textarea").value = "";
+    composer.dataset.tag = "";
+    composer.querySelectorAll(".tag").forEach(x => x.classList.remove("on"));
+  }
+  composer.hidden = false;
+  placeComposer();
+  drawAnno();
+  const ta = composer.querySelector("textarea");
+  ta.focus({ preventScroll: true });
+  composer.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+function placeComposer() {
+  const p = S.pending;
+  if (!p || !composer || composer.hidden) return;
+  const r = p.rects.at(-1), pg = S.pages[r[0] - 1];
+  const W = pg.div.offsetWidth, H = pg.div.offsetHeight;
+  let top = pg.div.offsetTop + r[4] * H + 8;
+  if (r[4] > 0.8) top = pg.div.offsetTop + p.rects[0][2] * H - 8 - (composer.offsetHeight || 230);
+  composer.style.top = top + "px";
+  composer.style.left = pg.div.offsetLeft + clamp(r[1] * W, 8, W - 368) + "px";
+}
+function nudgeComposer() {
+  composer.classList.remove("shake"); void composer.offsetWidth; composer.classList.add("shake");
+  toast("当前批注还没保存：⌘↵ 保存，或 Esc 放弃");
+  composer.querySelector("textarea").focus();
+}
+function closeComposer() {
+  if (!composer) return;
+  composer.querySelector("textarea").blur();
+  composer.hidden = true; S.pending = null;
+  drawAnno();
+}
+function commitComposer() {
+  const p = S.pending;
+  if (!p) return;
+  const text = composer.querySelector("textarea").value.trim();
+  const tag = composer.dataset.tag || "";
+  if (!text && !tag) { nudgeComposer(); return; }
+  if (!ensureAuthor()) return;
+  const now = isoNow();
+  const it = { id: newId(), n: nextN(), kind: p.kind, page: p.page, rects: p.rects, quote: p.quote, ctx: p.ctx,
+    comment: text, tag, author: S.author, status: "open", status_at: now, created: now, updated: now, deleted: false };
+  S.items.push(it);
+  closeComposer();
+  S.focusId = it.id;
+  drawAnno(); renderList(); scrollCardIntoView(it.id);
+  scheduleSave();
+}
+const nextN = () => S.items.reduce((m, it) => Math.max(m, it.n || 0), 0) + 1;
+
+// ------------------------------------------------------------------ drawing on pages
+const liveItems = () => S.items.filter(it => !it.deleted);
+function drawAnno() {
+  for (const pg of S.pages) { pg.anno.replaceChildren(); pg.badges.replaceChildren(); pg.used = []; }
+  const items = sortItems(liveItems().filter(it => it.rects && it.rects.length));
+  for (const it of items) drawItem(it, false);
+  if (S.pending) drawItem(S.pending, true);
+}
+function drawItem(it, pending) {
+  const st = "st-" + (it.status || "open");
+  const focus = !pending && it.id === S.focusId;
+  for (const r of it.rects) {
+    const pg = S.pages[r[0] - 1]; if (!pg) continue;
+    const d = el("div", `hl ${it.kind === "region" ? "region" : ""} ${pending ? "pending" : st} ${focus ? "focus" : ""}`);
+    d.dataset.id = it.id || "";
+    Object.assign(d.style, { left: r[1] * 100 + "%", top: r[2] * 100 + "%", width: (r[3] - r[1]) * 100 + "%", height: (r[4] - r[2]) * 100 + "%" });
+    pg.anno.append(d);
+  }
+  if (pending) return;
+  const [p, x0, y0, , y1] = it.rects[0], pg = S.pages[p - 1]; if (!pg) return;
+  const right = x0 >= 0.5;
+  let y = it.kind === "region" ? y0 + 0.008 : (y0 + y1) / 2;
+  while (pg.used.some(u => u.right === right && Math.abs(u.y - y) < 0.02)) y += 0.022;
+  pg.used.push({ right, y });
+  const b = el("button", `badge ${st} ${focus ? "focus" : ""}`, String(it.n));
+  b.title = `#${it.n} ${it.comment || ""}`.slice(0, 120);
+  Object.assign(b.style, { left: (right ? 0.958 : 0.042) * 100 + "%", top: y * 100 + "%" });
+  b.onclick = e => { e.stopPropagation(); focusItem(it.id, { list: true }); };
+  pg.badges.append(b);
+}
+function sortKey(it) {
+  if (it.kind === "global" || !it.rects || !it.rects.length) return [0, 0, 0, 0, it.n || 0];
+  const [p, x0, y0] = it.rects[0];
+  return [1, p, x0 < 0.5 ? 0 : 1, y0, it.n || 0];
+}
+function sortItems(a) {
+  return [...a].sort((x, y) => { const kx = sortKey(x), ky = sortKey(y); for (let i = 0; i < kx.length; i++) if (kx[i] !== ky[i]) return kx[i] - ky[i]; return 0; });
+}
+
+// ------------------------------------------------------------------ sidebar
+function renderList() {
+  if (isEditingInList()) { S.listStale = true; return; }
+  S.listStale = false;
+  const live = liveItems();
+  const cnt = { all: live.length, open: 0, done: 0, discuss: 0 };
+  live.forEach(it => cnt[it.status || "open"]++);
+  $("#filters").replaceChildren(...[["all", "全部"], ["open", "未处理"], ["done", "已改"], ["discuss", "待讨论"]].map(([k, lab]) => {
+    const b = el("button", S.filter === k ? "on" : "", lab); b.append(el("span", "c", String(cnt[k])));
+    b.onclick = () => { S.filter = k; renderList(); };
+    return b;
+  }));
+  const authors = [...new Set(live.map(it => it.author).filter(Boolean))].sort();
+  if (authors.length > 1 || (S.who && !authors.includes(S.who))) {
+    if (S.who && !authors.includes(S.who)) S.who = "";
+    const sel = el("select"); sel.id = "authorSel"; sel.title = "按批注人筛选";
+    sel.append(new Option("所有人", ""), ...authors.map(a => new Option(a, a)));
+    sel.value = S.who || "";
+    sel.onchange = () => { S.who = sel.value; renderList(); drawAnno(); };
+    $("#filters").append(sel);
+  }
+  const shown = sortItems(live.filter(passFilter));
+  const nodes = [];
+  if (!live.length) {
+    const e = el("div", "empty");
+    e.innerHTML = `从这里开始：<br>· <kbd>点击</kbd>任意一句话 → 整句批注，<kbd>⇧点击</kbd>另一句可把范围延伸过去<br>
+      · <kbd>拖选</kbd>任意一段文字 → 文字批注（可跨页）<br>· 按 <kbd>R</kbd> 或按住 <kbd>⌥</kbd> 拖框 → 区域批注（图、表、公式）<br>
+      · 右上「+ 整体意见」写不针对具体位置的意见<br>每条都会自动保存，并带上 synctex 反查的 <code>.tex</code> 行号。`;
+    nodes.push(e);
+  }
+  let grp = null;
+  for (const it of shown) {
+    const g = sortKey(it)[0] === 0 ? "整体意见" : `第 ${it.rects[0][0]} 页`;
+    if (g !== grp) { nodes.push(el("div", "group", g)); grp = g; }
+    nodes.push(card(it));
+  }
+  listEl.replaceChildren(...nodes);
+}
+function isEditingInList() { return !!(S.editingId && listEl.contains(document.activeElement) && document.activeElement.tagName === "TEXTAREA"); }
+function card(it) {
+  const st = it.status || "open";
+  const c = el("div", `card st-${st} ${it.id === S.focusId ? "focus" : ""}`); c.dataset.id = it.id;
+  const h = el("div", "cardHead");
+  h.append(el("span", "num", "#" + it.n));
+  if (it.author) h.append(el("span", "who", it.author));
+  h.append(el("span", null, KIND[it.kind] || it.kind));
+  if (it.tag) h.append(el("span", "t", it.tag));
+  if (it.source && it.source.length) { const s = el("span", "src", it.source.join(", ")); s.title = it.source.join("\n"); h.append(s); }
+  c.append(h);
+  if (it.quote) { const q = el("div", "quote", (it.kind === "region" ? "区域内文字：" : "") + it.quote); q.title = it.quote; c.append(q); }
+  if (S.editingId === it.id) {
+    const box = el("div");
+    let tag = it.tag || "";
+    const tags = el("div", "tags"); tags.append(...tagButtons(() => tag, v => { tag = v; }));
+    tags.querySelectorAll(".tag").forEach(x => x.classList.toggle("on", x.textContent === tag));
+    const ta = el("textarea"); ta.value = it.comment || ""; ta.placeholder = it.kind === "global" ? "整体意见……（⌘↵ 保存，Esc 取消）" : "写批注……";
+    const f = el("div", "cFoot"); f.append(el("span", "kbd", "⌘↵ 保存 · Esc 取消"));
+    const cancel = el("button", "ghost", "取消"), ok = el("button", "primary", "保存");
+    const done = commit => {
+      S.editingId = null;
+      if (commit) {
+        const v = ta.value.trim();
+        if (!v && !tag && it.kind === "global") { it.deleted = true; }
+        if (v !== (it.comment || "") || tag !== (it.tag || "") || it.deleted) { it.comment = v; it.tag = tag; it.updated = isoNow(); scheduleSave(); }
+      } else if (!it.comment && it.kind === "global" && !it.tag) { it.deleted = true; it.updated = isoNow(); scheduleSave(); }
+      drawAnno(); renderList();
+    };
+    cancel.onclick = e => { e.stopPropagation(); done(false); };
+    ok.onclick = e => { e.stopPropagation(); done(true); };
+    ta.addEventListener("keydown", e => {
+      if (e.isComposing) return;
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); done(true); }
+      else if (e.key === "Escape") { e.preventDefault(); done(false); }
+    });
+    ta.addEventListener("click", e => e.stopPropagation());
+    f.append(cancel, ok);
+    box.append(tags, ta, f);
+    c.append(box);
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 0);
+  } else {
+    const cm = el("div", "comment" + (it.comment ? "" : " blank"), it.comment || "（只打了标签）");
+    cm.title = "双击编辑";
+    cm.ondblclick = e => { e.stopPropagation(); startEdit(it.id); };
+    c.append(cm);
+  }
+  if (it.reply) {
+    const r = el("div", "reply"); r.append(el("b", null, `${it.reply_by || "回复"} · ${hhmm(it.reply_at)}　`), document.createTextNode(it.reply)); c.append(r);
+  }
+  const f = el("div", "cardFoot");
+  const seg = el("div", "seg");
+  for (const [k, lab] of Object.entries(STATUS)) {
+    const b = el("button", `s-${k} ${st === k ? "on" : ""}`, lab);
+    b.onclick = e => { e.stopPropagation(); if (it.status !== k) { it.status = k; it.status_at = isoNow(); scheduleSave(); drawAnno(); renderList(); } };
+    seg.append(b);
+  }
+  const edit = el("button", "ghost", "编辑"); edit.onclick = e => { e.stopPropagation(); startEdit(it.id); };
+  const del = el("button", "ghost", "删除"); del.onclick = e => { e.stopPropagation(); removeItem(it); };
+  f.append(seg, el("span", "sp"), edit, del);
+  c.append(f);
+  c.onclick = () => focusItem(it.id, { page: true });
+  return c;
+}
+function startEdit(id) { S.editingId = id; S.focusId = id; S.listStale = false; renderList(); drawAnno(); }
+function removeItem(it) {
+  it.deleted = true; it.updated = isoNow();
+  if (S.focusId === it.id) S.focusId = null;
+  scheduleSave(); drawAnno(); renderList();
+  toast(`已删除 #${it.n}`, "撤销", () => { it.deleted = false; it.updated = isoNow(); scheduleSave(); drawAnno(); renderList(); });
+}
+function focusItem(id, { list = false, page = false } = {}) {
+  S.focusId = id;
+  drawAnno();
+  if (!isEditingInList()) renderList();
+  const it = S.items.find(x => x.id === id);
+  if (list) scrollCardIntoView(id);
+  if (page && it && it.rects && it.rects.length) {
+    const r = it.rects[0], pg = S.pages[r[0] - 1];
+    const y = pg.div.offsetTop + r[2] * pg.div.offsetHeight;
+    if (y < viewer.scrollTop + 40 || y > viewer.scrollTop + viewer.clientHeight - 80) viewer.scrollTo({ top: y - viewer.clientHeight * 0.3, behavior: "smooth" });
+    setTimeout(() => pg.anno.querySelectorAll(`.hl[data-id="${id}"]`).forEach(d => { d.classList.remove("flash"); void d.offsetWidth; d.classList.add("flash"); }), 250);
+  }
+}
+function scrollCardIntoView(id) {
+  const c = listEl.querySelector(`.card[data-id="${id}"]`);
+  if (c) c.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+function passFilter(it) {
+  return (S.filter === "all" || (it.status || "open") === S.filter) && (!S.who || it.author === S.who);
+}
+function stepFocus(d) {
+  const a = sortItems(liveItems().filter(passFilter));
+  if (!a.length) return;
+  const i = a.findIndex(it => it.id === S.focusId);
+  const next = a[i < 0 ? (d > 0 ? 0 : a.length - 1) : clamp(i + d, 0, a.length - 1)];
+  focusItem(next.id, { list: true, page: true });
+}
+
+// ------------------------------------------------------------------ persistence
+const bkey = () => "paper-annotate:items:" + S.round.name;
+function backup() { try { localStorage.setItem(bkey(), JSON.stringify(S.items)); } catch {} }
+async function loadItems() {
+  let server = [];
+  try { server = (await (await fetch(`/api/r/${encodeURIComponent(S.round.name)}/annotations`)).json()).items || []; }
+  catch { setSave("读不到服务端批注", "err"); }
+  S.items = server;
+  let local = [];
+  try { local = JSON.parse(localStorage.getItem(bkey()) || "[]"); } catch {}
+  let need = false;
+  for (const l of local) {
+    const s = S.items.find(x => x.id === l.id);
+    if (!s) { S.items.push(l); need = true; continue; }
+    if ((l.updated || "") > (s.updated || "")) { CLIENT_FIELDS.forEach(k => { if (k in l) s[k] = l[k]; }); need = true; }
+    if ((l.status_at || "") > (s.status_at || "")) { s.status = l.status; s.status_at = l.status_at; need = true; }
+  }
+  if (need) scheduleSave(); else setSave(S.items.length ? `已载入 ${liveItems().length} 条` : "");
+}
+function applyServer(items) {
+  let changed = false;
+  for (const s of items) {
+    const l = S.items.find(x => x.id === s.id);
+    if (!l) { S.items.push(s); changed = true; continue; }
+    for (const k of SERVER_FIELDS) if (JSON.stringify(l[k]) !== JSON.stringify(s[k])) { l[k] = s[k]; changed = true; }
+    if ((s.updated || "") > (l.updated || "")) { CLIENT_FIELDS.forEach(k => { if (k in s) l[k] = s[k]; }); changed = true; }
+    if ((s.status_at || "") > (l.status_at || "")) { l.status = s.status; l.status_at = s.status_at; changed = true; }
+  }
+  if (changed) { backup(); drawAnno(); renderList(); }
+}
+function scheduleSave() {
+  S.dirty = true; backup();
+  clearTimeout(S.saveT); S.saveT = setTimeout(save, 450);
+  setSave("待保存…");
+}
+async function save() {
+  clearTimeout(S.saveT);
+  if (S.savePromise) await S.savePromise;
+  if (!S.dirty || !S.round) return;
+  S.dirty = false;
+  const name = S.round.name;
+  setSave("保存中…");
+  S.savePromise = (async () => {
+    try {
+      const r = await fetch(`/api/r/${encodeURIComponent(name)}/annotations`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: S.items }) });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const d = await r.json();
+      if (S.round && S.round.name === name) applyServer(d.items || []);
+      const t = new Date();
+      setSave(`已保存 ${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`, "ok");
+    } catch (e) {
+      S.dirty = true;
+      setSave("保存失败（服务没开？）· 已暂存在浏览器", "err");
+    }
+  })();
+  await S.savePromise; S.savePromise = null;
+  if (S.dirty) { clearTimeout(S.saveT); S.saveT = setTimeout(save, 3000); }
+}
+async function poll() {
+  if (!S.round || document.hidden || S.dirty || S.savePromise) return;
+  try { const d = await (await fetch(`/api/r/${encodeURIComponent(S.round.name)}/annotations`)).json(); applyServer(d.items || []); } catch {}
+  if (S.listStale && !isEditingInList()) renderList();
+}
+function setSave(t, cls = "") { const e = $("#saveState"); e.textContent = t; e.className = cls; }
+function updateBanner() {
+  const b = $("#banner");
+  if (!S.round || !S.live) { b.hidden = true; return; }
+  const latest = S.rounds.at(-1);
+  b.replaceChildren();
+  if (latest && S.round.name !== latest.name) {
+    b.append(`你在看旧一轮 ${S.round.name.slice(0, 3)}（PDF ${hhmm(S.round.pdf_mtime)}）。`);
+    const go = el("button", null, `切到最新 ${latest.name.slice(0, 3)}`); go.onclick = () => openRound(latest.name); b.append(go);
+    b.hidden = false; return;
+  }
+  if (S.live.exists && S.live.changed_since_last_round) {
+    b.append(`论文 PDF 已重新编译（${hhmm(S.live.mtime)}）。这一轮的批注仍然对应 ${hhmm(S.round.pdf_mtime)} 的快照。`);
+    const go = el("button", "primary", "用最新 PDF 开新一轮"); go.onclick = newRound; b.append(go);
+    b.hidden = false; return;
+  }
+  b.hidden = true;
+}
+async function newRound() {
+  if (S.dirty || S.savePromise) await save();
+  try {
+    const d = await (await fetch("/api/rounds", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).json();
+    if (d.error) { toast(d.error); return; }
+    await loadRounds();
+    await openRound(d.round.name);
+    toast(d.created ? `已开新一轮 ${d.round.name.slice(0, 3)}；旧批注在左上角下拉里` : "PDF 没变，沿用当前轮");
+  } catch { toast("新建失败：服务没开？"); }
+}
+async function copyMd() {
+  if (S.dirty || S.savePromise) await save();
+  try {
+    const t = await (await fetch(`/api/r/${encodeURIComponent(S.round.name)}/md`)).text();
+    await navigator.clipboard.writeText(t);
+    toast(`已复制 ${liveItems().length} 条批注的 Markdown`);
+  } catch (e) { toast("复制失败：" + e.message); }
+}
+
+// ------------------------------------------------------------------ ui wiring
+let toastT;
+function toast(msg, act, fn) {
+  const t = $("#toast"); t.replaceChildren(el("span", null, msg));
+  if (act) { const b = el("button", null, act); b.onclick = () => { fn(); t.classList.remove("show"); }; t.append(b); }
+  t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), act ? 6000 : 2600);
+}
+function setMode(m) {
+  S.mode = m;
+  pagesEl.classList.toggle("mode-region", m === "region");
+  document.querySelectorAll("#modeSeg button").forEach(b => b.classList.toggle("on", b.dataset.mode === m));
+}
+function showAuthor() { $("#authorBtn").textContent = "署名：" + (S.author || "未设置"); }
+function askAuthor() {
+  const v = (window.prompt("你的名字（会写进你新建的每条批注，方便作者知道是谁提的）", S.author || "") || "").trim().slice(0, 40);
+  if (v) { S.author = v; try { localStorage.setItem("paper-annotate:author", v); } catch {} }
+  showAuthor();
+  return S.author;
+}
+function ensureAuthor() { return S.author || askAuthor(); }
+function wireSplitter() {
+  const sp = $("#splitter");
+  const setSide = w => {
+    w = Math.round(clamp(w, 260, Math.max(300, window.innerWidth - 380)));
+    document.documentElement.style.setProperty("--side-w", w + "px");
+    return w;
+  };
+  try { const w = +localStorage.getItem("paper-annotate:side-w"); if (w) setSide(w); } catch {}
+  const refit = () => { if (S.fit) setZoom(0, true); };
+  sp.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    sp.setPointerCapture(e.pointerId);
+    sp.classList.add("drag"); document.body.classList.add("resizing");
+    let w = 0, t = null;
+    const move = ev => { w = setSide(window.innerWidth - ev.clientX - 3); clearTimeout(t); t = setTimeout(refit, 50); };
+    const up = () => {
+      sp.removeEventListener("pointermove", move);
+      sp.classList.remove("drag"); document.body.classList.remove("resizing");
+      clearTimeout(t); refit();
+      if (w) try { localStorage.setItem("paper-annotate:side-w", String(w)); } catch {}
+    };
+    sp.addEventListener("pointermove", move);
+    sp.addEventListener("pointerup", up, { once: true });
+    sp.addEventListener("pointercancel", up, { once: true });
+  });
+  sp.addEventListener("dblclick", () => {
+    document.documentElement.style.removeProperty("--side-w");
+    try { localStorage.removeItem("paper-annotate:side-w"); } catch {}
+    refit();
+  });
+}
+function wireUi() {
+  wireSplitter();
+  $("#roundSel").onchange = e => openRound(e.target.value);
+  document.querySelectorAll("#modeSeg button").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+  $("#zIn").onclick = () => setZoom(S.scale * 1.15);
+  $("#zOut").onclick = () => setZoom(S.scale / 1.15);
+  $("#zFit").onclick = () => setZoom(0, true);
+  $("#copyMd").onclick = copyMd;
+  $("#authorBtn").onclick = () => askAuthor();
+  showAuthor();
+  $("#exportBtn").onclick = async () => {
+    if (!S.round) return;
+    if (S.dirty || S.savePromise) await save();
+    const a = el("a"); a.href = `/api/r/${encodeURIComponent(S.round.name)}/export`;
+    a.download = `annotations-${S.round.name}${S.author ? "-" + S.author : ""}.json`;
+    document.body.append(a); a.click(); a.remove();
+  };
+  $("#importBtn").onclick = () => $("#importFile").click();
+  $("#importFile").onchange = async e => {
+    const f = e.target.files[0]; e.target.value = "";
+    if (!f || !S.round) return;
+    if (S.dirty || S.savePromise) await save();
+    try {
+      const r = await fetch(`/api/import?round=${encodeURIComponent(S.round.name)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: await f.text() });
+      const d = await r.json();
+      if (d.error) { toast("导入失败：" + d.error); return; }
+      if (d.round !== S.round.name) await openRound(d.round);
+      else { await loadItems(); drawAnno(); renderList(); }
+      toast(`导入 ${d.added} 条新批注${d.updated ? `，更新 ${d.updated} 条` : ""}` + (d.mismatch ? "（PDF 版本不同，位置可能有偏差）" : ""));
+    } catch (err) { toast("导入失败：" + err.message); }
+  };
+  $("#addGlobal").onclick = () => {
+    if (!ensureAuthor()) return;
+    const now = isoNow();
+    const it = { id: newId(), n: nextN(), kind: "global", page: 0, rects: [], quote: "", ctx: null, comment: "", tag: "",
+      author: S.author, status: "open", status_at: now, created: now, updated: now, deleted: false };
+    S.items.push(it); S.filter = "all"; startEdit(it.id); listEl.scrollTop = 0;
+  };
+  let scrollT;
+  viewer.addEventListener("scroll", () => { clearTimeout(scrollT); scrollT = setTimeout(() => { if (!S.zooming) schedule(); updatePageInfo(); }, 60); });
+  // 触控板双指捏合（Chrome/Edge/Firefox 发 ctrl+wheel）、Ctrl/⌘+滚轮：以光标为中心缩放
+  viewer.addEventListener("wheel", e => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const k = clamp(Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.15 : 0.01)), 0.8, 1.25);
+    setZoom(S.scale * k, false, e.clientX, e.clientY);
+  }, { passive: false });
+  // Safari 的捏合手势
+  let g0 = 1;
+  viewer.addEventListener("gesturestart", e => { e.preventDefault(); g0 = S.scale; });
+  viewer.addEventListener("gesturechange", e => { e.preventDefault(); setZoom(g0 * e.scale, false, e.clientX, e.clientY); });
+  viewer.addEventListener("gestureend", e => e.preventDefault());
+  window.addEventListener("resize", () => { if (S.fit) setZoom(0, true); });
+
+  pagesEl.addEventListener("mousedown", e => {
+    if (S.mode !== "text" || e.button !== 0) return;
+    const tl = e.target.closest(".textLayer"); if (!tl) return;
+    const pg = S.pages[+tl.parentElement.dataset.p - 1];
+    if (e.altKey) { startRegion(e, pg); return; }
+    if (e.detail > 1) clearTimeout(S.clickT);
+    S.down = { x: e.clientX, y: e.clientY, pg };
+    tl.classList.add("selecting");
+  });
+  document.addEventListener("mouseup", e => {
+    document.querySelectorAll(".textLayer.selecting").forEach(t => t.classList.remove("selecting"));
+    const d = S.down; S.down = null;
+    if (!d) return;
+    const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4;
+    const sel = window.getSelection();
+    if (sel.rangeCount && !sel.isCollapsed && sel.toString().trim().length >= 2 && (moved || e.detail > 1)) {
+      clearTimeout(S.clickT);
+      onSelection(sel.getRangeAt(0));
+      return;
+    }
+    if (!moved && e.detail === 1) {
+      const shift = e.shiftKey, x = e.clientX, y = e.clientY;
+      clearTimeout(S.clickT);
+      S.clickT = setTimeout(() => onSentenceClick(d.pg, x, y, shift), 230);
+    }
+  });
+  pagesEl.addEventListener("click", e => {
+    if (e.target === pagesEl && S.pending && !composerText()) closeComposer();
+  });
+  document.addEventListener("keydown", e => {
+    // ⌘+ / ⌘− / ⌘0 缩放 PDF，而不是整个网页
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && ["=", "+", "-", "_", "0"].includes(e.key)) {
+      e.preventDefault();
+      if (e.key === "0") setZoom(0, true);
+      else setZoom(S.scale * (e.key === "-" || e.key === "_" ? 1 / 1.15 : 1.15));
+      return;
+    }
+    const typing = /^(TEXTAREA|INPUT|SELECT)$/.test(document.activeElement.tagName);
+    if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "Escape") { if (S.pending) closeComposer(); else if (S.mode === "region") setMode("text"); else { S.focusId = null; drawAnno(); renderList(); } }
+    else if (e.key === "r" || e.key === "R") setMode(S.mode === "region" ? "text" : "region");
+    else if (e.key === "t" || e.key === "T") setMode("text");
+    else if (e.key === "j") stepFocus(1);
+    else if (e.key === "k") stepFocus(-1);
+    else if (e.key === "+" || e.key === "=") setZoom(S.scale * 1.15);
+    else if (e.key === "-") setZoom(S.scale / 1.15);
+    else if (e.key === "0") setZoom(0, true);
+    else if (e.key === "Enter" && S.focusId) { e.preventDefault(); startEdit(S.focusId); }
+    else return;
+    e.preventDefault();
+  });
+  window.addEventListener("beforeunload", e => { if (S.dirty || composerText()) { backup(); e.preventDefault(); e.returnValue = ""; } });
+}
+boot();
+</script>
+</body>
+</html>
