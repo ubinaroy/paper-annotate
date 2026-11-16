@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """paper-annotate：在浏览器里对论文 PDF 逐句 / 逐区域写批注的本地小服务（只依赖 Python 3.9+ 标准库）。
 
-  python3 server.py serve path/to/main.pdf [--tex-dir DIR] [--data DIR] [--port 8791]
+  python3 server.py path/to/main.pdf [--tex-dir DIR] [--data DIR] [--port 8791]   # 即 serve，可省略
+  python3 server.py serve path/to/main.pdf ...
   python3 server.py new-round  [--data DIR]          # 用重新编译后的 PDF 开新一轮
   python3 server.py reply <轮次> <编号> "回复" [--by 名字] [--status done|discuss|open] [--data DIR]
   python3 server.py md <轮次> [--data DIR]             # 重新生成并打印 annotations.md
@@ -21,6 +22,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -630,7 +632,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "文件不是合法的 JSON"}, 400)
 
 
+COMMANDS = ("serve", "new-round", "reply", "md")
+
+
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # 省略子命令时默认 serve：`python3 server.py paper.pdf` 与 `python3 server.py` 都直接打开网页
+    if not argv or (argv[0] not in COMMANDS and argv[0] not in ("-h", "--help")):
+        argv.insert(0, "serve")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--data", type=Path, default=Path("annotate-data"), help="批注数据目录（默认 ./annotate-data）")
@@ -664,6 +673,12 @@ def main(argv=None):
         meta, created = new_round(force=args.force, note=args.note)
         print(("新建 " if created else "PDF 没变，沿用 ") + meta["name"])
         return
+    if args.cmd in ("reply", "md"):
+        try:
+            round_dir(args.round)
+        except KeyError:
+            names = ", ".join(r["name"] for r in list_rounds()) or "（还没有）"
+            raise SystemExit(f"没有这一轮：{args.round}。数据目录 {CFG.data} 里有：{names}")
     if args.cmd == "reply":
         it = set_reply(args.round, args.n, args.text, args.status, args.by)
         print(f"#{it['n']} → {STATUS_LABEL.get(it.get('status', 'open'))}")

@@ -9,10 +9,10 @@
 
 ```bash
 git clone <本仓库> && cd paper-annotate
-python3 server.py serve path/to/main.pdf
+python3 server.py path/to/main.pdf
 ```
 
-打开终端里打印出的地址（默认 <http://localhost:8791>）。批注数据存在当前目录的 `annotate-data/`；想放别处就加 `--data <目录>`。第一次启动之后，PDF 路径会记在数据目录里，再启动只要 `python3 server.py serve`（加上同样的 `--data`）。
+打开终端里打印出的地址（默认 <http://localhost:8791>）。批注数据存在当前目录的 `annotate-data/`；想放别处就加 `--data <目录>`。第一次启动之后，PDF 路径会记在数据目录里，再启动只要 `python3 server.py`（加上同样的 `--data`）。`serve` 子命令可写可不写。
 
 ## 怎么批注
 
@@ -33,7 +33,7 @@ python3 server.py serve path/to/main.pdf
 ## 互改流程
 
 1. **作者**把编译好的 PDF 发给大家（同一份文件即可，不需要源码）。
-2. **审稿人**各自运行 `python3 server.py serve 收到的.pdf`，批注完点顶栏「**导出**」，得到一个 `annotations-….json`，发回给作者。
+2. **审稿人**各自运行 `python3 server.py 收到的.pdf`，批注完点顶栏「**导出**」，得到一个 `annotations-….json`，发回给作者。
 3. **作者**在自己的页面点「**导入**」，选这些文件。别人的批注会合并进来，重新编号，每条标明是谁写的，侧栏可以按人筛选。
    - 工具按 PDF 内容判断是不是同一份稿子，不认文件名，所以对方改了文件名也没关系。如果对方批的是旧版本 PDF，会导进你当前打开的那一轮，并提示位置可能有偏差。
    - 同一个文件导入两次不会重复：同一条批注只保留较新的版本。
